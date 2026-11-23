@@ -916,13 +916,41 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
   }, [itemsPool, onGameComplete, triggerEmp]);
 
-  // Touch control helper handlers
-  const handleTouchStart = (dir: 'left' | 'right' | 'up' | 'down') => {
-    keysRef.current[dir] = true;
-  };
-  const handleTouchEnd = (dir: 'left' | 'right' | 'up' | 'down') => {
-    keysRef.current[dir] = false;
-  };
+  // Zero-lag mobile touch/pointer listener generator
+  const createButtonListeners = (dir: 'left' | 'right' | 'up' | 'down') => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      e.preventDefault();
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {}
+      keysRef.current[dir] = true;
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      e.preventDefault();
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {}
+      keysRef.current[dir] = false;
+    },
+    onPointerCancel: (e: React.PointerEvent) => {
+      e.preventDefault();
+      keysRef.current[dir] = false;
+    },
+    onPointerLeave: () => {
+      keysRef.current[dir] = false;
+    },
+    onTouchStart: (e: React.TouchEvent) => {
+      e.preventDefault();
+      keysRef.current[dir] = true;
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      e.preventDefault();
+      keysRef.current[dir] = false;
+    },
+    onContextMenu: (e: React.MouseEvent) => {
+      e.preventDefault();
+    },
+  });
 
   const handleForceLand = () => {
     const s = stateRef.current;
@@ -936,9 +964,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-nordic-darkest select-none">
-      {/* Game Canvas */}
-      <canvas ref={canvasRef} className="absolute inset-0 block w-full h-full cursor-none" />
+    <div className="relative w-full h-screen h-[100dvh] overflow-hidden bg-nordic-darkest select-none touch-none">
+      {/* Game Canvas with touch fallback */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 block w-full h-full cursor-none touch-none select-none"
+      />
 
       {/* Floating HUD */}
       <HUD
@@ -954,55 +985,75 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         onForceLand={handleForceLand}
       />
 
-      {/* Mobile Touch Controller (Visible on touch/mobile screens) */}
-      <div className="absolute bottom-6 inset-x-6 flex justify-between items-end md:hidden pointer-events-none z-30">
-        {/* Left/Right D-Pad */}
-        <div className="flex gap-2 pointer-events-auto">
+      {/* Mobile Arcade Controller (Prominent Arrows for Mobile Gameplay) */}
+      <div className="absolute bottom-5 inset-x-3 sm:inset-x-6 flex justify-between items-end select-none touch-none z-30 pointer-events-none pb-safe">
+        {/* Left Cluster: Dedicated Steering Arrows (Left & Right) */}
+        <div className="flex items-center gap-2.5 sm:gap-3 pointer-events-auto bg-slate-950/75 p-2 sm:p-2.5 rounded-3xl border border-cyan-500/30 backdrop-blur-md shadow-2xl">
+          {/* Steer Left Arrow */}
           <button
-            onTouchStart={() => handleTouchStart('left')}
-            onTouchEnd={() => handleTouchEnd('left')}
-            onMouseDown={() => handleTouchStart('left')}
-            onMouseUp={() => handleTouchEnd('left')}
-            className="w-14 h-14 bg-slate-900/80 active:bg-cyan-500/30 border border-slate-700 active:border-cyan-400 rounded-2xl flex items-center justify-center text-slate-200"
+            {...createButtonListeners('left')}
+            className="w-16 h-16 sm:w-18 sm:h-18 bg-slate-900/95 active:bg-cyan-500/40 border-2 border-cyan-500/60 active:border-cyan-300 rounded-2xl flex flex-col items-center justify-center text-cyan-300 active:scale-90 transition-transform shadow-lg shadow-cyan-950/60 select-none touch-none"
+            aria-label="Steer Left"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-8 h-8 stroke-[2.5]" />
+            <span className="text-[9px] font-mono font-bold tracking-wider uppercase mt-0.5 text-cyan-400">
+              LEFT
+            </span>
           </button>
+
+          {/* Steer Right Arrow */}
           <button
-            onTouchStart={() => handleTouchStart('right')}
-            onTouchEnd={() => handleTouchEnd('right')}
-            onMouseDown={() => handleTouchStart('right')}
-            onMouseUp={() => handleTouchEnd('right')}
-            className="w-14 h-14 bg-slate-900/80 active:bg-cyan-500/30 border border-slate-700 active:border-cyan-400 rounded-2xl flex items-center justify-center text-slate-200"
+            {...createButtonListeners('right')}
+            className="w-16 h-16 sm:w-18 sm:h-18 bg-slate-900/95 active:bg-cyan-500/40 border-2 border-cyan-500/60 active:border-cyan-300 rounded-2xl flex flex-col items-center justify-center text-cyan-300 active:scale-90 transition-transform shadow-lg shadow-cyan-950/60 select-none touch-none"
+            aria-label="Steer Right"
           >
-            <ArrowRight className="w-6 h-6" />
+            <ArrowRight className="w-8 h-8 stroke-[2.5]" />
+            <span className="text-[9px] font-mono font-bold tracking-wider uppercase mt-0.5 text-cyan-400">
+              RIGHT
+            </span>
           </button>
         </div>
 
-        {/* Action / Brake / Dive Buttons */}
-        <div className="flex gap-2 pointer-events-auto">
+        {/* Right Cluster: Up (Slow Glide), Down (Speed Dive Smash), EMP Burst */}
+        <div className="flex items-center gap-2 sm:gap-2.5 pointer-events-auto bg-slate-950/75 p-2 sm:p-2.5 rounded-3xl border border-slate-700/60 backdrop-blur-md shadow-2xl">
+          {/* EMP Shockwave Burst Button */}
           <button
             onClick={triggerEmp}
-            className="w-14 h-14 bg-cyan-600/80 active:bg-cyan-400 border border-cyan-400 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-cyan-500/40"
+            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center transition-all select-none touch-none active:scale-90 ${
+              empCharge >= 100
+                ? 'bg-gradient-to-br from-cyan-500 to-teal-400 text-slate-950 border-2 border-cyan-300 shadow-lg shadow-cyan-400/50 animate-pulse'
+                : 'bg-slate-900/80 text-slate-500 border border-slate-700/50'
+            }`}
+            aria-label="EMP Shockwave"
           >
             <Zap className="w-6 h-6 fill-current" />
+            <span className="text-[8px] font-mono font-black tracking-wider uppercase mt-0.5">
+              {empCharge >= 100 ? 'EMP' : `${Math.round(empCharge)}%`}
+            </span>
           </button>
+
+          {/* Slow / Parachute Up Arrow */}
           <button
-            onTouchStart={() => handleTouchStart('up')}
-            onTouchEnd={() => handleTouchEnd('up')}
-            onMouseDown={() => handleTouchStart('up')}
-            onMouseUp={() => handleTouchEnd('up')}
-            className="w-14 h-14 bg-slate-900/80 active:bg-cyan-500/30 border border-slate-700 active:border-cyan-400 rounded-2xl flex items-center justify-center text-slate-200"
+            {...createButtonListeners('up')}
+            className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-900/95 active:bg-sky-500/30 border-2 border-slate-700 active:border-sky-400 rounded-2xl flex flex-col items-center justify-center text-slate-200 active:scale-90 transition-transform select-none touch-none"
+            aria-label="Slow Parachute"
           >
-            <ArrowUp className="w-6 h-6" />
+            <ArrowUp className="w-6 h-6 stroke-[2.5]" />
+            <span className="text-[8px] font-mono font-bold tracking-wider uppercase mt-0.5 text-slate-400">
+              SLOW
+            </span>
           </button>
+
+          {/* Dive / Smash Down Arrow */}
           <button
-            onTouchStart={() => handleTouchStart('down')}
-            onTouchEnd={() => handleTouchEnd('down')}
-            onMouseDown={() => handleTouchStart('down')}
-            onMouseUp={() => handleTouchEnd('down')}
-            className="w-14 h-14 bg-slate-900/80 active:bg-cyan-500/30 border border-slate-700 active:border-cyan-400 rounded-2xl flex items-center justify-center text-slate-200"
+            {...createButtonListeners('down')}
+            className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-900/95 active:bg-amber-500/30 border-2 border-slate-700 active:border-amber-400 rounded-2xl flex flex-col items-center justify-center text-slate-200 active:scale-90 transition-transform select-none touch-none"
+            aria-label="Dive Smash"
           >
-            <ArrowDown className="w-6 h-6" />
+            <ArrowDown className="w-6 h-6 stroke-[2.5]" />
+            <span className="text-[8px] font-mono font-bold tracking-wider uppercase mt-0.5 text-slate-400">
+              DIVE
+            </span>
           </button>
         </div>
       </div>
