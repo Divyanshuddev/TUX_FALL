@@ -49,6 +49,47 @@ interface GameItemInstance {
   pulsePhase: number;
 }
 
+// Concise short names for clean mobile phone displays
+const SHORT_COMPONENT_NAMES: Record<string, string> = {
+  'kernel-lts': 'Linux 6.12',
+  'kernel-zen': 'Zen Kernel',
+  'ebpf-subsystem': 'eBPF',
+  'arch-x86-64-v3': 'x86_64',
+  'arch-riscv64': 'RISC-V',
+  'zfs-dkms': 'OpenZFS',
+  'systemd-init': 'systemd',
+  'openrc-init': 'OpenRC',
+  'runit-init': 'runit',
+  'distro-arch': 'Arch Linux',
+  'distro-debian': 'Debian',
+  'distro-fedora': 'Fedora',
+  'distro-nixos': 'NixOS',
+  'distro-alpine': 'Alpine',
+  'distro-gentoo': 'Gentoo',
+  'distro-void': 'Void Linux',
+  'display-wayland': 'Wayland',
+  'display-x11': 'X11',
+  'de-hyprland': 'Hyprland',
+  'de-gnome47': 'GNOME 47',
+  'de-kde6': 'KDE Plasma',
+  'de-i3wm': 'i3wm',
+  'de-sway': 'Sway',
+  'tool-bash': 'Bash',
+  'tool-zsh-starship': 'Zsh',
+  'tool-coreutils': 'Coreutils',
+  'tool-neovim': 'Neovim',
+  'tool-curl': 'curl',
+  'tool-grep-sed-awk': 'grep/awk',
+  'tool-btop': 'btop',
+  'tool-tmux': 'tmux',
+  'tool-pipewire': 'PipeWire',
+  'tool-git': 'Git',
+  'hazard-regedit': 'regedit.exe',
+  'hazard-bsod': 'BSoD Crash',
+  'hazard-telemetry': 'Cortana',
+  'hazard-panic': 'Kernel Panic',
+};
+
 interface Snowflake {
   x: number;
   y: number;
@@ -260,13 +301,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (candidates.length === 0) candidates = itemsPool;
 
       const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-      const safeMargin = Math.max(120, Math.min(canvasWidth * 0.25, 160));
+      const isMobile = canvasWidth < 640;
+      const safeMargin = isMobile ? 65 : Math.max(120, Math.min(canvasWidth * 0.25, 160));
       const x = Math.random() * (canvasWidth - safeMargin * 2) + safeMargin;
       const y = canvasHeight + 50; // Spawns from bottom, flows upward
 
-      // Sizing for responsive large side bricks
-      const boxW = 190;
-      const boxH = 48;
+      // Sizing: small compact bricks on mobile, large smash bricks on desktop
+      const boxW = isMobile ? 105 : 190;
+      const boxH = isMobile ? 32 : 48;
+      const radius = isMobile ? 22 : 36;
 
       s.items.push({
         id: `${chosen.id}-${Date.now()}-${Math.random()}`,
@@ -275,7 +318,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         y,
         vx: (Math.random() - 0.5) * 0.6,
         vy: 0,
-        radius: 36,
+        radius,
         boxW,
         boxH,
         collected: false,
@@ -386,13 +429,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
         // Check SMASH collision with Tux
         if (!item.collected && !s.isLanded) {
-          const halfW = (item.boxW || 190) / 2;
-          const halfH = (item.boxH || 48) / 2;
+          const isMobile = w < 640;
+          const halfW = (item.boxW || (isMobile ? 50 : 95)) / 2;
+          const halfH = (item.boxH || (isMobile ? 16 : 24)) / 2;
           const dx = Math.abs(item.x - tux.x);
           const dy = Math.abs(item.y - tux.y);
 
-          // Hit / Smash condition with large side brick
-          if (dx < halfW + 18 && dy < halfH + 22) {
+          const hitToleranceW = isMobile ? 12 : 18;
+          const hitToleranceH = isMobile ? 14 : 22;
+
+          // Hit / Smash condition with responsive brick
+          if (dx < halfW + hitToleranceW && dy < halfH + hitToleranceH) {
             item.collected = true;
 
             if (item.component.category === 'hazard') {
@@ -456,12 +503,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               // Restore a bit of integrity
               s.stability = Math.min(100, s.stability + 3);
 
+              const displayName = isMobile
+                ? (SHORT_COMPONENT_NAMES[item.component.id] || item.component.name)
+                : item.component.name;
+
               // Add floating smash score text
               s.floatingTexts.push({
                 id: nextTextId.current++,
                 x: item.x,
                 y: item.y - 12,
-                text: `+${earned} ${item.component.name}`,
+                text: `+${earned} ${displayName}`,
                 color: item.component.color,
                 alpha: 1,
               });
@@ -659,91 +710,169 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       }
 
-      // Render Falling Linux Items (Responsive Large Smash Bricks)
+      // Render Falling Linux Items (Responsive Large Smash Bricks on Desktop, Compact on Mobile)
       s.items.forEach((item) => {
         const comp = item.component;
         const isHazard = comp.category === 'hazard';
+        const isMobile = w < 640;
 
-        // 1. Calculate responsive font size and box dimensions
-        const maxScreenW = Math.max(180, Math.min(340, w - 36));
+        // Use concise short names on mobile phones, full names on desktop
+        const displayName = isMobile
+          ? (SHORT_COMPONENT_NAMES[comp.id] || comp.name)
+          : comp.name;
 
-        // Start with large punchy font
-        let titleFontSize = 13.5;
-        ctx.font = `bold ${titleFontSize}px "JetBrains Mono", monospace`;
-        let titleMetrics = ctx.measureText(comp.name);
-
-        // Dynamically scale down font if text is exceptionally long, guaranteeing it fits inside maxScreenW
-        while (titleMetrics.width + 44 > maxScreenW && titleFontSize > 9.5) {
-          titleFontSize -= 0.5;
+        if (isMobile) {
+          // === MOBILE VIEW COMPACT BRICK ===
+          const titleFontSize = 11;
           ctx.font = `bold ${titleFontSize}px "JetBrains Mono", monospace`;
-          titleMetrics = ctx.measureText(comp.name);
-        }
+          const titleMetrics = ctx.measureText(displayName);
 
-        const subtitleText = `${comp.tag} • ${comp.points > 0 ? '+' : ''}${comp.points} PTS`;
-        const subFontSize = Math.max(8.5, Math.min(10, titleFontSize - 3));
-        ctx.font = `bold ${subFontSize}px "JetBrains Mono", monospace`;
-        const subMetrics = ctx.measureText(subtitleText);
+          const subtitleText = `${comp.tag} ${comp.points > 0 ? '+' : ''}${comp.points}`;
+          const subFontSize = 7.5;
+          ctx.font = `bold ${subFontSize}px "JetBrains Mono", monospace`;
+          const subMetrics = ctx.measureText(subtitleText);
 
-        // Box width dynamically wraps whichever text line is wider, with generous horizontal padding
-        const maxTextWidth = Math.max(titleMetrics.width, subMetrics.width);
-        const boxW = Math.min(maxScreenW, Math.max(175, Math.ceil(maxTextWidth + 44)));
-        const boxH = Math.max(48, Math.ceil(titleFontSize * 2 + 18));
-        const radius = 10;
-        item.boxW = boxW;
-        item.boxH = boxH;
+          const maxTextWidth = Math.max(titleMetrics.width, subMetrics.width);
+          // Compact width: between 88px and 125px so bricks leave plenty of dodge room
+          const maxMobileW = Math.min(135, Math.max(85, w - 20));
+          const boxW = Math.min(maxMobileW, Math.max(88, Math.ceil(maxTextWidth + 22)));
+          const boxH = 32;
+          const radius = 6;
+          item.boxW = boxW;
+          item.boxH = boxH;
 
-        // Keep brick strictly inside canvas viewport bounds so it never clips off screen
-        const halfW = boxW / 2;
-        if (item.x - halfW < 12) item.x = halfW + 12;
-        if (item.x + halfW > w - 12) item.x = w - halfW - 12;
+          // Keep brick strictly inside canvas viewport bounds
+          const halfW = boxW / 2;
+          if (item.x - halfW < 8) item.x = halfW + 8;
+          if (item.x + halfW > w - 8) item.x = w - halfW - 8;
 
-        ctx.save();
-        ctx.translate(item.x, item.y);
+          ctx.save();
+          ctx.translate(item.x, item.y);
 
-        // Outer glow
-        ctx.shadowColor = comp.color;
-        ctx.shadowBlur = isHazard ? 18 : 14;
+          // Outer glow
+          ctx.shadowColor = comp.color;
+          ctx.shadowBlur = isHazard ? 12 : 8;
 
-        // Background capsule (Large Arcade Brick with cyber gradient)
-        const bgGrad = ctx.createLinearGradient(0, -boxH / 2, 0, boxH / 2);
-        if (isHazard) {
-          bgGrad.addColorStop(0, 'rgba(115, 18, 18, 0.95)');
-          bgGrad.addColorStop(1, 'rgba(55, 8, 8, 0.95)');
+          // Background capsule
+          const bgGrad = ctx.createLinearGradient(0, -boxH / 2, 0, boxH / 2);
+          if (isHazard) {
+            bgGrad.addColorStop(0, 'rgba(115, 18, 18, 0.96)');
+            bgGrad.addColorStop(1, 'rgba(55, 8, 8, 0.96)');
+          } else {
+            bgGrad.addColorStop(0, 'rgba(18, 28, 48, 0.96)');
+            bgGrad.addColorStop(1, 'rgba(8, 14, 25, 0.96)');
+          }
+          ctx.fillStyle = bgGrad;
+          ctx.strokeStyle = comp.color;
+          ctx.lineWidth = 1.8;
+
+          ctx.beginPath();
+          ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, radius);
+          ctx.fill();
+          ctx.stroke();
+
+          // Left accent stripe
+          ctx.fillStyle = comp.color;
+          ctx.beginPath();
+          ctx.roundRect(-boxW / 2 + 3, -boxH / 2 + 5, 3, boxH - 10, 1.5);
+          ctx.fill();
+
+          // Compact Title Text
+          ctx.shadowBlur = 3;
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `bold ${titleFontSize}px "JetBrains Mono", monospace`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(displayName, 2, -boxH * 0.18);
+
+          // Compact Subtitle
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = comp.color;
+          ctx.font = `bold ${subFontSize}px "JetBrains Mono", monospace`;
+          ctx.fillText(subtitleText, 2, boxH * 0.24);
+
+          ctx.restore();
         } else {
-          bgGrad.addColorStop(0, 'rgba(18, 28, 48, 0.96)');
-          bgGrad.addColorStop(1, 'rgba(8, 14, 25, 0.96)');
+          // === DESKTOP / TABLET LARGE SMASH BRICK ===
+          const maxScreenW = Math.max(180, Math.min(340, w - 36));
+
+          let titleFontSize = 13.5;
+          ctx.font = `bold ${titleFontSize}px "JetBrains Mono", monospace`;
+          let titleMetrics = ctx.measureText(comp.name);
+
+          // Dynamically scale down font if text is exceptionally long
+          while (titleMetrics.width + 44 > maxScreenW && titleFontSize > 9.5) {
+            titleFontSize -= 0.5;
+            ctx.font = `bold ${titleFontSize}px "JetBrains Mono", monospace`;
+            titleMetrics = ctx.measureText(comp.name);
+          }
+
+          const subtitleText = `${comp.tag} • ${comp.points > 0 ? '+' : ''}${comp.points} PTS`;
+          const subFontSize = Math.max(8.5, Math.min(10, titleFontSize - 3));
+          ctx.font = `bold ${subFontSize}px "JetBrains Mono", monospace`;
+          const subMetrics = ctx.measureText(subtitleText);
+
+          const maxTextWidth = Math.max(titleMetrics.width, subMetrics.width);
+          const boxW = Math.min(maxScreenW, Math.max(175, Math.ceil(maxTextWidth + 44)));
+          const boxH = Math.max(48, Math.ceil(titleFontSize * 2 + 18));
+          const radius = 10;
+          item.boxW = boxW;
+          item.boxH = boxH;
+
+          // Keep brick strictly inside canvas viewport bounds so it never clips off screen
+          const halfW = boxW / 2;
+          if (item.x - halfW < 12) item.x = halfW + 12;
+          if (item.x + halfW > w - 12) item.x = w - halfW - 12;
+
+          ctx.save();
+          ctx.translate(item.x, item.y);
+
+          // Outer glow
+          ctx.shadowColor = comp.color;
+          ctx.shadowBlur = isHazard ? 18 : 14;
+
+          // Background capsule (Large Arcade Brick with cyber gradient)
+          const bgGrad = ctx.createLinearGradient(0, -boxH / 2, 0, boxH / 2);
+          if (isHazard) {
+            bgGrad.addColorStop(0, 'rgba(115, 18, 18, 0.95)');
+            bgGrad.addColorStop(1, 'rgba(55, 8, 8, 0.95)');
+          } else {
+            bgGrad.addColorStop(0, 'rgba(18, 28, 48, 0.96)');
+            bgGrad.addColorStop(1, 'rgba(8, 14, 25, 0.96)');
+          }
+          ctx.fillStyle = bgGrad;
+          ctx.strokeStyle = comp.color;
+          ctx.lineWidth = 2.5;
+
+          ctx.beginPath();
+          ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, radius);
+          ctx.fill();
+          ctx.stroke();
+
+          // Left accent indicator stripe
+          ctx.fillStyle = comp.color;
+          ctx.beginPath();
+          ctx.roundRect(-boxW / 2 + 4, -boxH / 2 + 7, 4, boxH - 14, 2);
+          ctx.fill();
+
+          // Large Title Text (Centered, perfectly inside the box)
+          ctx.shadowBlur = 4;
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `bold ${titleFontSize}px "JetBrains Mono", monospace`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(comp.name, 2, -boxH * 0.16);
+
+          // Subtitle: Tag and points badge (Centered, inside the box)
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = comp.color;
+          ctx.font = `bold ${subFontSize}px "JetBrains Mono", monospace`;
+          ctx.fillText(subtitleText, 2, boxH * 0.22);
+
+          ctx.restore();
         }
-        ctx.fillStyle = bgGrad;
-        ctx.strokeStyle = comp.color;
-        ctx.lineWidth = 2.5;
-
-        ctx.beginPath();
-        ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, radius);
-        ctx.fill();
-        ctx.stroke();
-
-        // Left accent indicator stripe
-        ctx.fillStyle = comp.color;
-        ctx.beginPath();
-        ctx.roundRect(-boxW / 2 + 4, -boxH / 2 + 7, 4, boxH - 14, 2);
-        ctx.fill();
-
-        // Large Title Text (Centered, perfectly inside the box)
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-        ctx.fillStyle = '#ffffff';
-        ctx.font = `bold ${titleFontSize}px "JetBrains Mono", monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(comp.name, 2, -boxH * 0.16);
-
-        // Subtitle: Tag and points badge (Centered, inside the box)
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = comp.color;
-        ctx.font = `bold ${subFontSize}px "JetBrains Mono", monospace`;
-        ctx.fillText(subtitleText, 2, boxH * 0.22);
-
-        ctx.restore();
       });
 
       // Render Particles
@@ -964,11 +1093,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   };
 
   return (
-    <div className="relative w-full h-screen h-[100dvh] overflow-hidden bg-nordic-darkest select-none touch-none">
-      {/* Game Canvas with touch fallback */}
+    <div className="relative w-full h-full min-h-[100dvh] overflow-hidden bg-nordic-darkest select-none touch-none">
+      {/* Game Canvas with direct touch/pointer steering support */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 block w-full h-full cursor-none touch-none select-none"
+        onPointerDown={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          if (clickX < rect.width * 0.42) {
+            keysRef.current.left = true;
+          } else if (clickX > rect.width * 0.58) {
+            keysRef.current.right = true;
+          }
+        }}
+        onPointerUp={() => {
+          keysRef.current.left = false;
+          keysRef.current.right = false;
+        }}
+        onPointerCancel={() => {
+          keysRef.current.left = false;
+          keysRef.current.right = false;
+        }}
       />
 
       {/* Floating HUD */}
@@ -985,18 +1131,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         onForceLand={handleForceLand}
       />
 
-      {/* Mobile Arcade Controller (Prominent Arrows for Mobile Gameplay) */}
-      <div className="absolute bottom-5 inset-x-3 sm:inset-x-6 flex justify-between items-end select-none touch-none z-30 pointer-events-none pb-safe">
+      {/* Mobile Arcade Controller (Fixed Prominent Arrows for Mobile Viewport) */}
+      <div
+        className="fixed inset-x-0 bottom-0 pointer-events-none z-50 flex justify-between items-end px-2 sm:px-6 select-none touch-none"
+        style={{ paddingBottom: 'max(10px, env(safe-area-inset-bottom, 10px))' }}
+      >
         {/* Left Cluster: Dedicated Steering Arrows (Left & Right) */}
-        <div className="flex items-center gap-2.5 sm:gap-3 pointer-events-auto bg-slate-950/75 p-2 sm:p-2.5 rounded-3xl border border-cyan-500/30 backdrop-blur-md shadow-2xl">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 pointer-events-auto bg-slate-950/85 p-1.5 sm:p-2.5 rounded-2xl border-2 border-cyan-500/50 backdrop-blur-md shadow-2xl shadow-cyan-950/60">
           {/* Steer Left Arrow */}
           <button
             {...createButtonListeners('left')}
-            className="w-16 h-16 sm:w-18 sm:h-18 bg-slate-900/95 active:bg-cyan-500/40 border-2 border-cyan-500/60 active:border-cyan-300 rounded-2xl flex flex-col items-center justify-center text-cyan-300 active:scale-90 transition-transform shadow-lg shadow-cyan-950/60 select-none touch-none"
+            className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-900 border-2 border-cyan-400/80 active:bg-cyan-500/30 text-cyan-300 rounded-xl flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform touch-none select-none"
             aria-label="Steer Left"
           >
-            <ArrowLeft className="w-8 h-8 stroke-[2.5]" />
-            <span className="text-[9px] font-mono font-bold tracking-wider uppercase mt-0.5 text-cyan-400">
+            <ArrowLeft className="w-6 h-6 sm:w-7 sm:h-7 stroke-[3]" />
+            <span className="text-[8px] sm:text-[9px] font-mono font-bold tracking-wider text-cyan-300 mt-0.5">
               LEFT
             </span>
           </button>
@@ -1004,30 +1153,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           {/* Steer Right Arrow */}
           <button
             {...createButtonListeners('right')}
-            className="w-16 h-16 sm:w-18 sm:h-18 bg-slate-900/95 active:bg-cyan-500/40 border-2 border-cyan-500/60 active:border-cyan-300 rounded-2xl flex flex-col items-center justify-center text-cyan-300 active:scale-90 transition-transform shadow-lg shadow-cyan-950/60 select-none touch-none"
+            className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-900 border-2 border-cyan-400/80 active:bg-cyan-500/30 text-cyan-300 rounded-xl flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform touch-none select-none"
             aria-label="Steer Right"
           >
-            <ArrowRight className="w-8 h-8 stroke-[2.5]" />
-            <span className="text-[9px] font-mono font-bold tracking-wider uppercase mt-0.5 text-cyan-400">
+            <ArrowRight className="w-6 h-6 sm:w-7 sm:h-7 stroke-[3]" />
+            <span className="text-[8px] sm:text-[9px] font-mono font-bold tracking-wider text-cyan-300 mt-0.5">
               RIGHT
             </span>
           </button>
         </div>
 
         {/* Right Cluster: Up (Slow Glide), Down (Speed Dive Smash), EMP Burst */}
-        <div className="flex items-center gap-2 sm:gap-2.5 pointer-events-auto bg-slate-950/75 p-2 sm:p-2.5 rounded-3xl border border-slate-700/60 backdrop-blur-md shadow-2xl">
+        <div className="flex items-center gap-1 sm:gap-2 pointer-events-auto bg-slate-950/85 p-1.5 sm:p-2.5 rounded-2xl border border-slate-700/70 backdrop-blur-md shadow-2xl">
           {/* EMP Shockwave Burst Button */}
           <button
             onClick={triggerEmp}
-            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center transition-all select-none touch-none active:scale-90 ${
+            className={`w-11 h-14 sm:w-14 sm:h-16 rounded-xl flex flex-col items-center justify-center transition-all touch-none select-none active:scale-95 ${
               empCharge >= 100
-                ? 'bg-gradient-to-br from-cyan-500 to-teal-400 text-slate-950 border-2 border-cyan-300 shadow-lg shadow-cyan-400/50 animate-pulse'
-                : 'bg-slate-900/80 text-slate-500 border border-slate-700/50'
+                ? 'bg-gradient-to-br from-cyan-400 to-teal-400 text-slate-950 border-2 border-cyan-200 font-bold shadow-lg shadow-cyan-400/60 animate-pulse'
+                : 'bg-slate-900 border border-slate-700/70 text-slate-400'
             }`}
             aria-label="EMP Shockwave"
           >
-            <Zap className="w-6 h-6 fill-current" />
-            <span className="text-[8px] font-mono font-black tracking-wider uppercase mt-0.5">
+            <Zap className="w-5 h-5 fill-current" />
+            <span className="text-[7.5px] sm:text-[8px] font-mono font-black tracking-wider uppercase mt-0.5">
               {empCharge >= 100 ? 'EMP' : `${Math.round(empCharge)}%`}
             </span>
           </button>
@@ -1035,11 +1184,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           {/* Slow / Parachute Up Arrow */}
           <button
             {...createButtonListeners('up')}
-            className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-900/95 active:bg-sky-500/30 border-2 border-slate-700 active:border-sky-400 rounded-2xl flex flex-col items-center justify-center text-slate-200 active:scale-90 transition-transform select-none touch-none"
+            className="w-11 h-14 sm:w-14 sm:h-16 bg-slate-900 border-2 border-slate-700 active:border-sky-400 active:bg-sky-500/30 rounded-xl flex flex-col items-center justify-center text-slate-200 active:scale-95 transition-transform select-none touch-none"
             aria-label="Slow Parachute"
           >
-            <ArrowUp className="w-6 h-6 stroke-[2.5]" />
-            <span className="text-[8px] font-mono font-bold tracking-wider uppercase mt-0.5 text-slate-400">
+            <ArrowUp className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
+            <span className="text-[7.5px] sm:text-[8px] font-mono font-bold tracking-wider uppercase mt-0.5 text-slate-400">
               SLOW
             </span>
           </button>
@@ -1047,11 +1196,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           {/* Dive / Smash Down Arrow */}
           <button
             {...createButtonListeners('down')}
-            className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-900/95 active:bg-amber-500/30 border-2 border-slate-700 active:border-amber-400 rounded-2xl flex flex-col items-center justify-center text-slate-200 active:scale-90 transition-transform select-none touch-none"
+            className="w-11 h-14 sm:w-14 sm:h-16 bg-slate-900 border-2 border-slate-700 active:border-amber-400 active:bg-amber-500/30 rounded-xl flex flex-col items-center justify-center text-slate-200 active:scale-95 transition-transform select-none touch-none"
             aria-label="Dive Smash"
           >
-            <ArrowDown className="w-6 h-6 stroke-[2.5]" />
-            <span className="text-[8px] font-mono font-bold tracking-wider uppercase mt-0.5 text-slate-400">
+            <ArrowDown className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
+            <span className="text-[7.5px] sm:text-[8px] font-mono font-bold tracking-wider uppercase mt-0.5 text-slate-400">
               DIVE
             </span>
           </button>

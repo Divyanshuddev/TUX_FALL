@@ -255,8 +255,8 @@ export default function Home() {
         </>
       )}
 
-      {/* Persistent Retro Top Bar */}
-      <header className="border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md px-4 py-2.5 flex items-center justify-between text-xs font-mono z-40">
+      {/* Persistent Retro Top Bar (Desktop or Menu/Result) */}
+      <header className={`border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md px-4 py-2.5 items-center justify-between text-xs font-mono z-40 ${gameStatus === 'PLAYING' ? 'hidden sm:flex' : 'flex'}`}>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 text-cyan-400 font-bold tracking-wider">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
