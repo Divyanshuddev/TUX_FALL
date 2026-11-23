@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+.pnp
+.pnp.js
+
+# Next.js build output
+.next/
+frontend/.next/
+out/
+frontend/out/
+build/
+dist/
+*.tsbuildinfo
+
+# Python virtual environment & cache
+.venv/
+backend/.venv/
+__pycache__/
+backend/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Local databases
+*.db
+*.sqlite3
+backend/tuxfall.db
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment & logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+.env
+.env*.local
